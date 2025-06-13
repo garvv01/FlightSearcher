@@ -39,7 +39,7 @@ class FlightSearch:
                 }
                 response_flight = requests.get(url="https://test.api.amadeus.com/v1/reference-data/locations", params=flight_params, headers=flight_headers)
                 iata_code = response_flight.json()['data'][0]['iataCode']
-            url = f"https://api.sheety.co/{your_project_id}/flightDeals/prices/{row_id}"
+            url = f"{your_url_here}/prices/{row_id}"
             body = {
                 "price": {
                     "iataCode": f"{iata_code}"
