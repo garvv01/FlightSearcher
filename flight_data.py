@@ -1,4 +1,4 @@
-import requests
+import requests, smtplib
 from flight_search import FlightSearch
 
 class FlightData:
@@ -7,7 +7,9 @@ class FlightData:
         self.flightsearch = FlightSearch(self.data)
         self.token = self.flightsearch.req_token()
 
-    def search_flight(self, dep_date, amt):
+    def search_flight(self, dep_date, amt, email_list):
+        amt = float(amt)
+        message_body = f"Flight Deals for {dep_date} under ₹{amt}:\n\n"
         for row in self.data:
             flight_headers = {
                 "Authorization": f"Bearer {self.token}"
@@ -18,7 +20,8 @@ class FlightData:
                 "departureDate": dep_date,
                 "adults": 1,
                 "currencyCode": "INR",
-                "max": 5
+                "max": 5,
+                "nonstop": "False"
             }
 
             try:
@@ -32,14 +35,13 @@ class FlightData:
                 offers = data.get("data", [])
 
                 if not offers:
-                    print(f"❌ No flights available for {row['city']} ({row['iataCode']})")
+                    message_body += f"No flights for {row['city']} ({row['iataCode']})\n"
                     continue
 
             except Exception as e:
-                print(f"🚨 API error for {row['city']} ({row['iataCode']}): {e}")
+                message_body += f"API error for {row['city']} ({row['iataCode']}): {e}\n"
                 continue
 
-            # Find cheapest flight under budget
             min_price = float('inf')
             cheapest_offer = None
 
@@ -50,15 +52,29 @@ class FlightData:
                         min_price = price
                         cheapest_offer = offer
                 except (KeyError, TypeError, ValueError):
-                    print(f"⚠️ Invalid offer format: {offer}")
                     continue
 
             if cheapest_offer:
-                airline = cheapest_offer["validatingAirlineCodes"][
-                    0] if "validatingAirlineCodes" in cheapest_offer else "Unknown"
+                airline = cheapest_offer["validatingAirlineCodes"][0] if "validatingAirlineCodes" in cheapest_offer else "Unknown"
                 dep_airport = cheapest_offer["itineraries"][0]["segments"][0]["departure"]["iataCode"]
                 arr_airport = cheapest_offer["itineraries"][0]["segments"][-1]["arrival"]["iataCode"]
                 dep_time = cheapest_offer["itineraries"][0]["segments"][0]["departure"]["at"]
-                print(f"✅ {row['city']}: ₹{min_price} with {airline} from {dep_airport} to {arr_airport} at {dep_time}")
+                message_body += f"✅ {row['city']}: ₹{min_price} with {airline} from {dep_airport} to {arr_airport} at {dep_time}\n"
             else:
-                print(f"❌ No flight to {row['city']} under ₹{amt}")
+                message_body += f"❌ No flight to {row['city']} under ₹{amt}\n"
+        self.send_email(email_list, f"Flight Deals for {dep_date}", message_body)
+
+    def send_email(self, email_list, subject, body):
+        from_email = "flightclub@gmail.com"
+        from_password = "flightclubpass"
+
+        for email in email_list:
+            message = f"Subject: {subject}\n\n{body}"
+            try:
+                with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                    server.starttls()
+                    server.login(from_email, from_password)
+                    server.sendmail(from_email, email, message)
+                    print(f"Sent to {email}")
+            except Exception as e:
+                print(f"Failed to send to {email}: {e}")
